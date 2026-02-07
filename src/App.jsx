@@ -679,6 +679,8 @@ export default function RecRoom(){
   const[profileMessage,setProfileMessage]=useState("");
   const[remoteProfiles,setRemoteProfiles]=useState([]);
   const[loadingProfiles,setLoadingProfiles]=useState(false);
+  const[reviewsLoading,setReviewsLoading]=useState(false);
+  const[reviewMessage,setReviewMessage]=useState("");
 
   useEffect(()=>{
     let isMounted=true;
@@ -719,7 +721,106 @@ export default function RecRoom(){
     loadProfiles();
   },[]);
 
-  const allProfiles=[...remoteProfiles,...CLASSMATES];
+  // Fetch reviews for selected profile
+  useEffect(()=>{
+    if(!selected) return;
+    (async()=>{
+      setReviewsLoading(true);
+      try {
+        const { data: reviewsData, error } = await supabase
+          .from("reviews")
+          .select("*")
+          .eq("profile_id", selected.id)
+          .order("created_at", { ascending: false });
+        
+        if(!error && reviewsData) {
+          setSelected(prev => prev ? ({
+            ...prev,
+            reviews: reviewsData.map(r => {
+              const nameFromEmail = r.reviewer_id?.substring(0, 8).toUpperCase() || "ANON";
+              return {
+                id: r.id,
+                rating: r.rating,
+                text: r.text,
+                reviewer: nameFromEmail,
+                date: new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                initials: nameFromEmail.substring(0, 2),
+                hasRecognition: false
+              };
+            })
+          }) : null);
+        }
+      } catch(err) {
+        console.error("Error fetching reviews:", err);
+      }
+      setReviewsLoading(false);
+    })();
+  }, [selected?.id]);
+
+  const handleSubmitReview=async(e)=>{
+    e?.preventDefault?.();
+    if(!authUser || !selected) return;
+    
+    setReviewMessage("");
+    try {
+      const { error } = await supabase.from("reviews").insert({
+        reviewer_id: authUser.id,
+        profile_id: selected.id,
+        rating: form.rating,
+        text: form.expertise + (form.personality ? "\n\n" + form.personality : "") + 
+              (form.contributions ? "\n\n" + form.contributions : "") + 
+              (form.support ? "\n\n" + form.support : ""),
+      });
+
+      if (error) {
+        setReviewMessage("Error submitting review. Please try again.");
+        return;
+      }
+
+      // Refresh reviews after successful submission
+      const { data: reviewsData } = await supabase
+        .from("reviews")
+        .select("*")
+        .eq("profile_id", selected.id)
+        .order("created_at", { ascending: false });
+      
+      if (reviewsData) {
+        setSelected(prev => ({
+          ...prev,
+          reviews: reviewsData.map(r => {
+            const nameFromEmail = r.reviewer_id?.substring(0, 8).toUpperCase() || "ANON";
+            return {
+              id: r.id,
+              rating: r.rating,
+              text: r.text,
+              reviewer: nameFromEmail,
+              date: new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              initials: nameFromEmail.substring(0, 2),
+              hasRecognition: false
+            };
+          })
+        }));
+      }
+
+      // Calculate and update average rating
+      if (reviewsData) {
+        const avgRating = reviewsData.reduce((sum, r) => sum + r.rating, 0) / reviewsData.length;
+        await supabase
+          .from("profiles")
+          .update({
+            avg_rating: avgRating,
+            review_count: reviewsData.length
+          })
+          .eq("id", selected.id);
+      }
+
+      setView("success");
+      setForm({rating:0,hover:0,expertise:"",personality:"",contributions:"",support:"",dims:[]});
+    } catch(err) {
+      console.error("Error submitting review:", err);
+      setReviewMessage("Error submitting review. Please try again.");
+    }
+  };
   const filtered=allProfiles.filter(c=>{
     const query=search.toLowerCase();
     const tags=c.tags||[];
@@ -1045,21 +1146,30 @@ export default function RecRoom(){
                   </div>
                 </div>
                 <div style={{textAlign:"center",marginBottom:24}}>
-                  <button className="submit-btn"style={{width:"auto",padding:"12px 40px",borderRadius:24}}onClick={()=>{setView("review");setForm({rating:0,hover:0,expertise:"",personality:"",contributions:"",support:"",dims:[]});}}>✏️ Leave a Review</button>
+                  {!authUser ? (
+                    <button className="submit-btn"style={{width:"auto",padding:"12px 40px",borderRadius:24}}onClick={goAuth}>🔓 Sign In to Review</button>
+                  ) : (
+                    <button className="submit-btn"style={{width:"auto",padding:"12px 40px",borderRadius:24}}onClick={()=>{setView("review");setForm({rating:0,hover:0,expertise:"",personality:"",contributions:"",support:"",dims:[]});}}>✏️ Leave a Review</button>
+                  )}
                 </div>
                 <div className="reviews-section">
                   <h3>💬 Reviews ({selected.reviews.length})</h3>
-                  {selected.reviews.map((rev,i)=>{
-                    const vk=`${selected.id}-${i}`;
-                    return(
-                      <div key={i}className="review-card">
-                        <div className="review-header">
-                          <div className="review-avatar"><span className="initials">{rev.initials}</span></div>
-                          <div className="review-meta">
-                            <div className="review-reviewer-name">{rev.reviewer}{rev.hasRecognition&&<span className="review-recognition-badge">⭐ Recognized</span>}</div>
-                            <div className="review-date">{rev.date}</div>
+                  {reviewsLoading ? (
+                    <div style={{textAlign:"center",padding:"24px",color:"var(--mid-gray)"}}>Loading reviews...</div>
+                  ) : selected.reviews.length === 0 ? (
+                    <div style={{textAlign:"center",padding:"24px",color:"var(--lt-gray)"}}>No reviews yet. Be the first to review!</div>
+                  ) : (
+                    selected.reviews.map((rev,i)=>{
+                      const vk=`${selected.id}-${i}`;
+                      return(
+                        <div key={i}className="review-card">
+                          <div className="review-header">
+                            <div className="review-avatar"><span className="initials">{rev.initials}</span></div>
+                            <div className="review-meta">
+                              <div className="review-reviewer-name">{rev.reviewer}{rev.hasRecognition&&<span className="review-recognition-badge">⭐ Recognized</span>}</div>
+                              <div className="review-date">{rev.date}</div>
+                            </div>
                           </div>
-                        </div>
                         <div className="review-stars"><StarRow rating={rev.rating}size={16}/></div>
                         <div className="review-text">{rev.text}</div>
                         <div className="review-helpful">
@@ -1068,8 +1178,9 @@ export default function RecRoom(){
                           <button className={`helpful-btn ${votes[vk]===false?"active":""}`}onClick={()=>toggleVote(vk,false)}><ThumbsDown size={13}/> No</button>
                         </div>
                       </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </>
             )}
@@ -1112,7 +1223,7 @@ export default function RecRoom(){
               <div className="form-group"><label>😊 Personality & Vibe</label><textarea placeholder="What's it like to work with them? How do they show up?"value={form.personality}onChange={e=>setForm(f=>({...f,personality:e.target.value}))}/></div>
               <div className="form-group"><label>🚀 Contributions to the Journey</label><textarea placeholder="How have they contributed to the cohort? What did they build or create?"value={form.contributions}onChange={e=>setForm(f=>({...f,contributions:e.target.value}))}/></div>
               <div className="form-group"><label>🤝 Support Offered</label><textarea placeholder="Have they helped you or others? Describe a time they stepped up."value={form.support}onChange={e=>setForm(f=>({...f,support:e.target.value}))}/></div>
-              <button className="submit-btn"disabled={!canSubmit}onClick={()=>setView("success")}>Submit Review</button>
+              <button className="submit-btn"disabled={!canSubmit}onClick={handleSubmitReview}>Submit Review</button>
             </div>
           </div>
         </div>
