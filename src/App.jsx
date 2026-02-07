@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Search, Check, ThumbsUp, ThumbsDown, BookOpen, Users, MessageCircle, Star } from "lucide-react";
+import { supabase } from "./supabaseClient";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
@@ -42,9 +43,11 @@ const STYLES = `
   .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; padding:0 24px 32px; }
   .classmate-card { background:var(--white); border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.08); cursor:pointer; transition:.25s; border:1px solid var(--border); }
   .classmate-card:hover { transform:translateY(-3px); box-shadow:0 6px 20px rgba(0,0,0,.14); border-color:var(--red-lt); }
-  .card-avatar-wrap { height:140px; background:linear-gradient(135deg,#f0f0f0,#e0e0e0); display:flex; align-items:center; justify-content:center; position:relative; }
-  .card-avatar { width:76px; height:76px; border-radius:50%; background:var(--red); border:3px solid var(--white); box-shadow:0 2px 10px rgba(0,0,0,.15); display:flex; align-items:center; justify-content:center; }
+  .card-avatar-wrap { height:140px; background:linear-gradient(135deg,#f0f0f0,#e0e0e0); display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; }
+  .card-avatar { width:76px; height:76px; border-radius:50%; background:var(--red); border:3px solid var(--white); box-shadow:0 2px 10px rgba(0,0,0,.15); display:flex; align-items:center; justify-content:center; z-index:1; }
   .card-avatar .initials { color:var(--white); font-family:'Playfair Display',serif; font-size:28px; font-weight:700; }
+  .card-photo { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+  .camera-shy-badge { position:absolute; left:-10px; right:-10px; top:50%; transform:translateY(-50%) rotate(-8deg); background:rgba(0,0,0,.65); color:var(--white); font-size:11px; font-weight:700; letter-spacing:1px; text-align:center; padding:4px 0; text-transform:uppercase; z-index:2; }
   .card-body { padding:16px; }
   .card-name { font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--black); margin-bottom:4px; }
   .card-role { font-size:13px; color:var(--red); font-weight:600; margin-bottom:8px; }
@@ -66,8 +69,10 @@ const STYLES = `
   /* Profile */
   .profile-page { background:var(--white); min-height:100vh; }
   .profile-hero { background:linear-gradient(135deg,var(--red),var(--red-dk)); padding:48px 24px 56px; text-align:center; }
-  .profile-avatar-lg { width:110px; height:110px; border-radius:50%; background:rgba(255,255,255,.2); border:4px solid var(--white); margin:0 auto 16px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.2); }
+  .profile-avatar-lg { width:110px; height:110px; border-radius:50%; background:rgba(255,255,255,.2); border:4px solid var(--white); margin:0 auto 16px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.2); position:relative; overflow:hidden; }
   .profile-avatar-lg .initials { color:var(--white); font-family:'Playfair Display',serif; font-size:40px; font-weight:700; }
+  .profile-photo { width:100%; height:100%; object-fit:cover; }
+  .profile-avatar-lg .camera-shy-badge { font-size:12px; }
   .profile-name { font-family:'Playfair Display',serif; color:var(--white); font-size:30px; font-weight:700; margin-bottom:4px; }
   .profile-role-badge { display:inline-block; background:rgba(255,255,255,.2); color:var(--white); font-size:13px; font-weight:600; padding:4px 16px; border-radius:16px; margin-bottom:12px; }
   .profile-overall-stars { display:flex; align-items:center; justify-content:center; gap:6px; }
@@ -273,39 +278,388 @@ const ALSO_SEARCH = [
   {label:"New to Tech",icon:"🚀",bg:"#F1F8E9",filter:"tech"},
 ];
 
-const CLASSMATES = [
-  {id:1,name:"Marcus Chen",initials:"MC",role:"Full-Stack Developer",skills:"React, Node.js, MongoDB, UI Design",career:"Senior developer at a fintech startup — loves building products that make finance accessible",hobbies:"Competitive chess, trail running, cooking Korean food",proudProject:"Built an AI-powered budget tracker that categorizes spending using NLP — helped 200+ beta users save 15% monthly",tags:["tech","leadership","mentor"],avgRating:4.8,reviewCount:7,recognition:true,
-    reviews:[
-      {reviewer:"Aisha B.",initials:"AB",rating:5,date:"Jan 28, 2025",text:"Marcus is hands-down one of the most collaborative people in our cohort. When I was stuck on my API integration at 2am, he hopped on a call within minutes. His code is clean and he explains things in a way that actually sticks.",hasRecognition:true},
-      {reviewer:"Jordan P.",initials:"JP",rating:5,date:"Jan 25, 2025",text:"Incredibly patient mentor. He never makes you feel behind — just keeps pushing you forward with honest, constructive feedback. His project demo literally blew minds.",hasRecognition:false},
-      {reviewer:"Sam R.",initials:"SR",rating:4,date:"Jan 22, 2025",text:"Great technical skills and always willing to help. Sometimes goes deep into rabbit holes during group sessions which can slow things down a bit, but the knowledge he shares is gold.",hasRecognition:true},
-    ]},
-  {id:2,name:"Destiny Wright",initials:"DW",role:"Product & UX Designer",skills:"Figma, User Research, Prototyping, Strategy",career:"Aspiring product manager — fascinated by how design can solve real human problems in underserved communities",hobbies:"Painting watercolors, yoga, podcasting about Black women in tech",proudProject:"Redesigned the onboarding flow for a nonprofit CRM — reduced user drop-off by 40% through empathy-driven research",tags:["design","strategy","community"],avgRating:4.9,reviewCount:6,recognition:true,
-    reviews:[
-      {reviewer:"Marcus C.",initials:"MC",rating:5,date:"Jan 27, 2025",text:"Destiny brings an energy to every group session that lifts everyone up. Her design thinking is genuinely next level — she reframes problems in ways none of us would have thought of.",hasRecognition:true},
-      {reviewer:"Tyler K.",initials:"TK",rating:5,date:"Jan 24, 2025",text:"Collaborated with Destiny on a wireframing session and she is phenomenal. Super organized, asks the right questions, and produces work that's both beautiful and functional.",hasRecognition:false},
-    ]},
-  {id:3,name:"Kai Okafor",initials:"KO",role:"Data Scientist",skills:"Python, ML, Pandas, TensorFlow, SQL",career:"Aiming for a data engineering role at a healthcare company — wants to use data to improve patient outcomes",hobbies:"Playing guitar, watching documentaries, urban gardening",proudProject:"Trained a sentiment analysis model on student feedback data — achieved 89% accuracy and surfaced actionable insights for program directors",tags:["data","AI","innovation"],avgRating:4.6,reviewCount:5,recognition:false,
-    reviews:[
-      {reviewer:"Destiny W.",initials:"DW",rating:5,date:"Jan 26, 2025",text:"Kai is the person I go to when I need to understand something technical. They break down complex ML concepts into digestible pieces and always have a real-world example ready.",hasRecognition:true},
-      {reviewer:"Aisha B.",initials:"AB",rating:4,date:"Jan 23, 2025",text:"Super talented with data. Sometimes a bit quiet in group discussions but when they do speak up, it's always something insightful. Would love to see them share more.",hasRecognition:false},
-    ]},
-  {id:4,name:"Aisha Bennett",initials:"AB",role:"Backend Engineer",skills:"Java, AWS, Docker, System Design",career:"Targeting a cloud infrastructure role — passionate about building reliable, scalable systems",hobbies:"Baking sourdough, reading sci-fi novels, volunteering at animal shelters",proudProject:"Architected a microservices deployment pipeline using Docker and AWS that reduced deployment time from 45 min to under 3 min",tags:["cloud","backend","reliability"],avgRating:4.7,reviewCount:4,recognition:true,
-    reviews:[
-      {reviewer:"Kai O.",initials:"KO",rating:5,date:"Jan 29, 2025",text:"Aisha is a rock. When the group gets stuck on infrastructure problems, she always has a clear, well-thought-out solution. Her system design skills are genuinely impressive for someone still in the fellowship.",hasRecognition:false},
-      {reviewer:"Marcus C.",initials:"MC",rating:5,date:"Jan 21, 2025",text:"Worked with Aisha on a joint project and was amazed at how she breaks down complex problems. Super reliable and always delivers on time.",hasRecognition:true},
-    ]},
-  {id:5,name:"Tyler Kim",initials:"TK",role:"Mobile Developer",skills:"Swift, Flutter, React Native, Dart",career:"Looking to join a startup building health & wellness apps — loves creating seamless mobile experiences",hobbies:"Skateboarding, photography, cooking Thai food",proudProject:"Built a habit-tracking mobile app with streak logic, push notifications, and an adaptive difficulty system that kept 80% of users engaged past day 30",tags:["mobile","UX","engagement"],avgRating:4.5,reviewCount:3,recognition:false,
-    reviews:[
-      {reviewer:"Jordan P.",initials:"JP",rating:5,date:"Jan 28, 2025",text:"Tyler's mobile app blew everyone away during demo day. The attention to detail in the UI is incredible — you can tell he genuinely cares about the user experience end to end.",hasRecognition:true},
-      {reviewer:"Sam R.",initials:"SR",rating:4,date:"Jan 25, 2025",text:"Great developer and super easy to work with. Really solid on the Flutter side. Would benefit from more focus on backend integration but the front-end work is top notch.",hasRecognition:false},
-    ]},
-  {id:6,name:"Jordan Park",initials:"JP",role:"DevOps & Automation",skills:"CI/CD, GitHub Actions, Python, Linux",career:"Wants to build developer tools — believes the right automation can 10x a team's productivity",hobbies:"Building custom mechanical keyboards, hiking, podcasts about startup culture",proudProject:"Built a full CI/CD pipeline with automated testing, staging deployment, and rollback capabilities — became the template for the entire cohort",tags:["devops","automation","tools"],avgRating:4.4,reviewCount:3,recognition:false,
-    reviews:[
-      {reviewer:"Aisha B.",initials:"AB",rating:5,date:"Jan 27, 2025",text:"Jordan's CI/CD setup literally saved our team hours of manual deployment work. They're incredibly generous with their knowledge and patient when walking others through the setup.",hasRecognition:true},
-      {reviewer:"Tyler K.",initials:"TK",rating:4,date:"Jan 24, 2025",text:"Solid technical skills especially in automation. Sometimes dives too deep into tooling optimization but the results always speak for themselves.",hasRecognition:false},
-    ]},
+const PROFILE_IMAGES = {
+  "Gary Gonzalez": "/profile-photos/image20.png",
+  "Manny": "/profile-photos/image9.png",
+  "Manny (Manuel)": "/profile-photos/image9.png",
+  "Joel P.": "/profile-photos/image13.png",
+  "Duvall Morgan": "/profile-photos/image7.png",
+  "Gamaliel": "/profile-photos/image12.png",
+  "David Omokagbor": "/profile-photos/image21.png",
+  "Juan Franco": "/profile-photos/image16.png",
+  "Kevin Natera": "/profile-photos/image10.png",
+  "Victor": "/profile-photos/image11.png",
+  "Pape Sy": "/profile-photos/image17.png",
+  "Jonel Richardson": "/profile-photos/image22.png",
+  "Jagger Sonia Toure": "/profile-photos/image14.png",
+  "Luba Kaper": "/profile-photos/image18.png",
+  "Paula Lawton": "/profile-photos/image5.png",
+  "Erick Perez": "/profile-photos/image15.png",
+};
+
+const CAMERA_SHY_NAMES = new Set([
+  "Ibrahima",
+  "Michael Chabler",
+  "Ismael Carabollo",
+]);
+
+const getInitials = (name="") => name.split(" ").filter(Boolean).slice(0,2).map(n=>n[0].toUpperCase()).join("");
+
+const applyMedia = (profile) => {
+  const image = PROFILE_IMAGES[profile.name] || profile.image || "";
+  return {
+    ...profile,
+    image,
+    cameraShy: CAMERA_SHY_NAMES.has(profile.name),
+  };
+};
+
+const BASE_PROFILES = [
+  {
+    id:1,
+    name:"Gary Gonzalez",
+    initials:"GG",
+    role:"Product & UX Designer",
+    skills:"Currently learning more frontend via UX/UI.",
+    professionalInterests:"Arts and Humanities, Science and Tech, Business and Administration, Healthcare, Skilled Trades",
+    career:"Going for a Design degree and becoming a product designer, building tools that resolve real world issues via UX/UI skills acquired.",
+    hobbies:"Photography, reading, outdoor activities (jogging with dog, sports, naps in Central Park), building side projects",
+    proudProject:"In L1, I built a PC Builder and I have been proud of that build ever since.",
+    bonusFact:"",
+    tags:["design","ux-ui","frontend"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:2,
+    name:"Ibrahima",
+    initials:"IB",
+    role:"Full-Stack Developer",
+    skills:"I don't know the skills I have not gonna lie.",
+    professionalInterests:"Trying to get money to train as a wrestler; interested in film/show production and the world of video editing.",
+    career:"I don't know my career path yet — still trying to find it at this moment.",
+    hobbies:"Playing basketball, used to play football, video games, going to the gym, learning to cook",
+    proudProject:"Language learning tool app focused on voice-to-voice learning with confidence grading, tone checks, scores, and a history panel to track mastery.",
+    bonusFact:"I've met two wrestlers I saw on TV twice but never asked about advice or if their company was hiring.",
+    tags:["exploring","creative","fullstack"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:3,
+    name:"Manny (Manuel)",
+    initials:"MM",
+    role:"Full-Stack Developer",
+    skills:"Project management",
+    professionalInterests:"Building accessible tech solutions for underserved communities",
+    career:"Currently seeking roles in AI product development and full-stack engineering",
+    hobbies:"Music, movies, and AI experimentation",
+    proudProject:"Calldone — reimagined for consumers to regain control of their time and decision-making; earned entry into Level 2 at Pursuit.",
+    bonusFact:"",
+    tags:["ai","product","fullstack"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:4,
+    name:"Joel P.",
+    initials:"JP",
+    role:"Product & UX Designer",
+    skills:"UI/UX design, project management, psychology, mental health advocacy",
+    professionalInterests:"Psychology, tech research, art and creative building, voice over work, writing",
+    career:"Pivoting from government infrastructure to ethical technology usage and advanced technology-based creativity",
+    hobbies:"Music, writing, poetry, philosophy and gaming",
+    proudProject:"Deep Hug — a mental health companion app for anxiety",
+    bonusFact:"",
+    tags:["design","mental-health","creative"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:5,
+    name:"Duvall Morgan",
+    initials:"DM",
+    role:"Data Scientist",
+    skills:"Python, Machine Learning, Data Engineering, Google Cloud (GCP) ecosystem",
+    professionalInterests:"AI Engineering and Data Architecture; designing agentic systems that act as intelligent sentinels",
+    career:"Mission-driven path focused on high-velocity learning and building systems that outlast the hype",
+    hobbies:"Deep-reading AI research and studying breakthroughs from MIT, Stanford, and Harvard Innovation Labs",
+    proudProject:"MotionFrame/Sentinel — current project with a major momentum spike and long-term focus",
+    bonusFact:"Google Higher Ed Leader with a 'Humble Giant' mindset; ambitious but a true team player",
+    tags:["ai","data","gcp"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:6,
+    name:"Michael Chabler",
+    initials:"MC",
+    role:"Full-Stack Developer",
+    skills:"IT support, writing, fine art, acting",
+    professionalInterests:"AI software development, writing, acting",
+    career:"Support tech for 15+ years with acting in theater and movies",
+    hobbies:"Writing, reading, swimming, running (weather permitting), hiking in the Catskills",
+    proudProject:"Spotify improvement app",
+    bonusFact:"Released an album of original children's music with Treehouse 10 in 2009 (Album: Bug in a Puddle).",
+    tags:["creative","it-support","software"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:7,
+    name:"Gamaliel",
+    initials:"GA",
+    role:"Backend Engineer",
+    skills:"Python, web development, backend development",
+    professionalInterests:"Software development and engineering",
+    career:"Former healthcare operations professional transitioning into software engineering, specializing in Python and AI to build tools that simplify complex user experiences",
+    hobbies:"Anime, boxing, reading, philanthropy, computers, and scenic views",
+    proudProject:"Meeting such an amazing group of people — nobody doing it like us",
+    bonusFact:"If I cross my legs while I am talking to you, I am locked in and fully focused",
+    tags:["backend","python","ai"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:8,
+    name:"David Omokagbor",
+    initials:"DO",
+    role:"Full-Stack Developer",
+    skills:"Full-stack development (Python, JavaScript), AI/ML fundamentals, recommender systems, backend API design, MongoDB modeling",
+    professionalInterests:"Applied AI, full-stack development, and building scalable intelligent products",
+    career:"Working toward becoming a full-stack AI engineer and leading technical projects",
+    hobbies:"Music production and audio engineering",
+    proudProject:"Recommendation system work and Smart Unit Converter project focused on clean data modeling and edge cases",
+    bonusFact:"I learn extremely fast and stay deeply curious, diving into new systems until I understand them",
+    tags:["fullstack","ai","music"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:9,
+    name:"Juan Franco",
+    initials:"JF",
+    role:"Full-Stack Developer",
+    skills:"AI-native software engineer, full-stack developer, 15+ years audio engineering and studio operations",
+    professionalInterests:"AI-native full-stack development, recording studio and video production",
+    career:"Full-stack developer",
+    hobbies:"Sports, music, AI",
+    proudProject:"Wingmate (airport app)",
+    bonusFact:"Enjoys warm weather, wants a remote role, and is into crypto, finance, and politics",
+    tags:["fullstack","ai","audio"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:10,
+    name:"Kevin Natera",
+    initials:"KN",
+    role:"Full-Stack Developer",
+    skills:"React, Redux, Ruby on Rails, Node.js, Python, Swift, HTML, CSS, JavaScript",
+    professionalInterests:"Software development role of any kind",
+    career:"Hoping to evolve into a tech career",
+    hobbies:"Gaming, anime, card magic, parkour",
+    proudProject:"Your Sol — app that stores user interests in a solar system generated one star at a time",
+    bonusFact:"",
+    tags:["fullstack","gaming","creative"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:11,
+    name:"Ismael Carabollo",
+    initials:"IC",
+    role:"Full-Stack Developer",
+    skills:"",
+    professionalInterests:"",
+    career:"",
+    hobbies:"",
+    proudProject:"",
+    bonusFact:"",
+    tags:["cohort"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:12,
+    name:"Victor",
+    initials:"VT",
+    role:"Product & UX Designer",
+    skills:"15 years cable and satellite technician experience with DirecTV and Spectrum",
+    professionalInterests:"AI-native UI/UX development",
+    career:"Goal is to become a fully AI-native developer specializing in UI/UX",
+    hobbies:"Movie buff who enjoys running and the great outdoors",
+    proudProject:"CommonGround — app that connects people going through life transitions via local meetups",
+    bonusFact:"",
+    tags:["ux-ui","ai","social-impact"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:13,
+    name:"Pape Sy",
+    initials:"PS",
+    role:"Full-Stack Developer",
+    skills:"",
+    professionalInterests:"",
+    career:"",
+    hobbies:"",
+    proudProject:"",
+    bonusFact:"",
+    tags:["cohort"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:14,
+    name:"Jonel Richardson",
+    initials:"JR",
+    role:"Product & UX Designer",
+    skills:"UX/UI design with accessibility focus, problem scoping and MVP development, Git/GitHub workflows",
+    professionalInterests:"Accessibility tools that serve diverse populations",
+    career:"Becoming AI native",
+    hobbies:"Fitness and cooking",
+    proudProject:"explainThis — an app translating technical jargon into plain language",
+    bonusFact:"Lived in Japan for 8 years teaching preschool",
+    tags:["ux-ui","accessibility","ai"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:15,
+    name:"Jagger Sonia Toure",
+    initials:"JST",
+    role:"Full-Stack Developer",
+    skills:"",
+    professionalInterests:"",
+    career:"",
+    hobbies:"",
+    proudProject:"",
+    bonusFact:"",
+    tags:["cohort"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:16,
+    name:"Luba Kaper",
+    initials:"LK",
+    role:"Mobile Developer",
+    skills:"iOS development (Swift, SwiftUI, Xcode), front-end development (React, TypeScript, Tailwind), backend fundamentals (Node.js, APIs), AI/LLM integration, product thinking, UX-driven development",
+    professionalInterests:"Building AI-native products, human-centered UX, and tools that solve real problems — especially how LLMs support learning and decision-making",
+    career:"Moving deeper into AI-native development and applied AI product work; wants to build and ship end-to-end on small, fast teams",
+    hobbies:"Music, cooking, traveling, long walks, learning new tools, side projects",
+    proudProject:"Sveti — AI tutor project focused on real learning needs, UX, guardrails, and learning styles",
+    bonusFact:"Graduated from music school — major in cello, minor in piano",
+    tags:["mobile","ai","product"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:17,
+    name:"Paula Lawton",
+    initials:"PL",
+    role:"Full-Stack Developer",
+    skills:"Full-stack development (React, Node.js, Express, Vite), AI/LLM prompt engineering, project management, program administration, grant management, workforce development, mental health instruction, HR certification, digital literacy instruction, workshop facilitation, financial literacy education, community organizing, business development",
+    professionalInterests:"AI training and development, AI compliance and governance, workforce development with AI integration, mental health support in professional settings, financial technology education, HR systems optimization, and AI-powered solutions for social impact",
+    career:"Transitioning from nonprofit leadership into AI-focused roles in training, development, compliance, and workforce solutions while launching ZenPawZ LLC",
+    hobbies:"SGI Buddhism practice, memoir writing, financial literacy advocacy, community organizing, cultural entrepreneurship, pet wellness",
+    proudProject:"AI Money Mentor — financial education platform that makes complex concepts accessible through AI-powered learning",
+    bonusFact:"Performed stand-up comedy for 2½ years at The Laugh Factory, The Comedy Cellar, and Carolines on Broadway",
+    tags:["fullstack","ai","workforce"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
+  {
+    id:18,
+    name:"Erick Perez",
+    initials:"EP",
+    role:"DevOps & Automation",
+    skills:"Systems administration, networking, mobile device management, cybersecurity with a focus on incident response",
+    professionalInterests:"Cybersecurity, systems administration, and AI",
+    career:"A consultant's consultant",
+    hobbies:"Mechanical engineering and legal subjects",
+    proudProject:"ListingTruthFinder — site designed to verify Zillow listing images with Google Street View (https://listingtruthfinder.com/)",
+    bonusFact:"From one of the smallest counties in New York State (County of Kings). Resources: https://news.ycombinator.com/ and https://krebsonsecurity.com/",
+    tags:["cybersecurity","systems","ai"],
+    image:"",
+    cameraShy:true,
+    avgRating:0,
+    reviewCount:0,
+    recognition:false,
+    reviews:[],
+  },
 ];
+
+const CLASSMATES = BASE_PROFILES.map(applyMedia);
 
 function StarIcon({filled,size=18}){return<svg width={size}height={size}viewBox="0 0 24 24"fill={filled?"#F5A623":"none"}stroke={filled?"#F5A623":"#E0E0E0"}strokeWidth="1.5"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>;}
 function StarRow({rating,size=18}){return<div style={{display:"flex",gap:"2px"}}>{[1,2,3,4,5].map(i=><StarIcon key={i}filled={i<=rating}size={size}/>)}</div>;}
@@ -317,21 +671,155 @@ export default function RecRoom(){
   const[tab,setTab]=useState("about");
   const[votes,setVotes]=useState({});
   const[form,setForm]=useState({rating:0,hover:0,expertise:"",personality:"",contributions:"",support:"",dims:[]});
+  const[authMode,setAuthMode]=useState("signIn");
+  const[authForm,setAuthForm]=useState({username:"",email:"",password:""});
+  const[authUser,setAuthUser]=useState(null);
+  const[authError,setAuthError]=useState("");
+  const[profileForm,setProfileForm]=useState({name:"",role:"",skills:"",professionalInterests:"",career:"",hobbies:"",proudProject:"",bonusFact:"",imageUrl:"",tags:""});
+  const[profileMessage,setProfileMessage]=useState("");
+  const[remoteProfiles,setRemoteProfiles]=useState([]);
+  const[loadingProfiles,setLoadingProfiles]=useState(false);
 
-  const filtered=CLASSMATES.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.role.toLowerCase().includes(search.toLowerCase())||c.tags.some(t=>t.toLowerCase().includes(search.toLowerCase())));
+  useEffect(()=>{
+    let isMounted=true;
+    supabase.auth.getSession().then(({data})=>{if(isMounted){setAuthUser(data.session?.user||null);}});
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session)=>{
+      setAuthUser(session?.user||null);
+    });
+    return ()=>{isMounted=false;listener?.subscription?.unsubscribe();};
+  },[]);
+
+  useEffect(()=>{
+    const loadProfiles=async()=>{
+      setLoadingProfiles(true);
+      const { data, error } = await supabase.from("profiles").select("*").order("created_at",{ascending:false});
+      if(!error&&data){
+        const mapped=data.map(p=>applyMedia({
+          id:p.id,
+          name:p.name||"",
+          initials:getInitials(p.name||""),
+          role:p.role||"Classmate",
+          skills:p.skills||"",
+          professionalInterests:p.professional_interests||"",
+          career:p.career||"",
+          hobbies:p.hobbies||"",
+          proudProject:p.proud_project||"",
+          bonusFact:p.bonus_fact||"",
+          tags:Array.isArray(p.tags)?p.tags:[],
+          image:p.image_url||"",
+          avgRating:p.avg_rating||0,
+          reviewCount:p.review_count||0,
+          recognition:!!p.recognition,
+          reviews:[],
+        }));
+        setRemoteProfiles(mapped);
+      }
+      setLoadingProfiles(false);
+    };
+    loadProfiles();
+  },[]);
+
+  const allProfiles=[...remoteProfiles,...CLASSMATES];
+  const filtered=allProfiles.filter(c=>{
+    const query=search.toLowerCase();
+    const tags=c.tags||[];
+    return (
+      c.name.toLowerCase().includes(query)||
+      c.role.toLowerCase().includes(query)||
+      (c.skills||"").toLowerCase().includes(query)||
+      (c.professionalInterests||"").toLowerCase().includes(query)||
+      tags.some(t=>t.toLowerCase().includes(query))
+    );
+  });
   const sorted=[...filtered].sort((a,b)=>b.avgRating-a.avgRating);
 
   const goProfile=(cm)=>{setSelected(cm);setView("profile");setTab("about");};
   const goHome=()=>{setView("home");setSelected(null);};
+  const goAuth=()=>{setView("auth");setSelected(null);};
   const toggleDim=(d)=>setForm(f=>({...f,dims:f.dims.includes(d)?f.dims.filter(x=>x!==d):[...f.dims,d]}));
   const toggleVote=(k,v)=>setVotes(vs=>({...vs,[k]:vs[k]===v?null:v}));
   const canSubmit=form.rating>0&&(form.expertise||form.personality||form.contributions||form.support);
+
+  const handleSignUp=async(e)=>{
+    e.preventDefault();
+    setAuthError("");
+    const { email, password, username } = authForm;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options:{ data:{ username } }
+    });
+    if(error){setAuthError(error.message);return;}
+    setAuthMode("signIn");
+  };
+
+  const handleSignIn=async(e)=>{
+    e.preventDefault();
+    setAuthError("");
+    const { email, password } = authForm;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error){setAuthError(error.message);}
+  };
+
+  const handleSignOut=async()=>{
+    await supabase.auth.signOut();
+  };
+
+  const handleSaveProfile=async(e)=>{
+    e.preventDefault();
+    setProfileMessage("");
+    if(!authUser){setProfileMessage("Please sign in to save a profile.");return;}
+    const tags=profileForm.tags.split(",").map(t=>t.trim()).filter(Boolean);
+    const payload={
+      user_id:authUser.id,
+      name:profileForm.name,
+      role:profileForm.role,
+      skills:profileForm.skills,
+      professional_interests:profileForm.professionalInterests,
+      career:profileForm.career,
+      hobbies:profileForm.hobbies,
+      proud_project:profileForm.proudProject,
+      bonus_fact:profileForm.bonusFact,
+      image_url:profileForm.imageUrl,
+      tags,
+    };
+    const { error } = await supabase.from("profiles").upsert(payload,{ onConflict:"user_id" });
+    if(error){setProfileMessage(error.message);return;}
+    setProfileMessage("Profile saved!");
+    const { data } = await supabase.from("profiles").select("*").order("created_at",{ascending:false});
+    if(data){
+      const mapped=data.map(p=>applyMedia({
+        id:p.id,
+        name:p.name||"",
+        initials:getInitials(p.name||""),
+        role:p.role||"Classmate",
+        skills:p.skills||"",
+        professionalInterests:p.professional_interests||"",
+        career:p.career||"",
+        hobbies:p.hobbies||"",
+        proudProject:p.proud_project||"",
+        bonusFact:p.bonus_fact||"",
+        tags:Array.isArray(p.tags)?p.tags:[],
+        image:p.image_url||"",
+        avgRating:p.avg_rating||0,
+        reviewCount:p.review_count||0,
+        recognition:!!p.recognition,
+        reviews:[],
+      }));
+      setRemoteProfiles(mapped);
+    }
+  };
 
   const CardComponent=({cm})=>(
     <div className="classmate-card" onClick={()=>goProfile(cm)}>
       <div className="card-avatar-wrap">
         {cm.recognition&&<div className="card-recognition">⭐ Recognized</div>}
-        <div className="card-avatar"><span className="initials">{cm.initials}</span></div>
+        {cm.image ? (
+          <img className="card-photo" src={cm.image} alt={`${cm.name} profile`} />
+        ) : (
+          <div className="card-avatar"><span className="initials">{cm.initials}</span></div>
+        )}
+        {cm.cameraShy&&<div className="camera-shy-badge">CAMERA SHY</div>}
       </div>
       <div className="card-body">
         <div className="card-name">{cm.name}</div>
@@ -348,7 +836,11 @@ export default function RecRoom(){
       <nav className="nav">
         <div className="nav-logo" onClick={goHome}><div className="burst"><div className="burst-inner"/></div>RecRoom</div>
         <div className="nav-search"><Search className="search-icon"size={16}/><input type="text"placeholder="Search classmates, skills, or interests..."value={search}onChange={e=>setSearch(e.target.value)}onFocus={()=>setView("home")}/></div>
-        <div className="nav-actions">{view!=="home"&&<button className="nav-btn"onClick={goHome}>← Browse</button>}</div>
+        <div className="nav-actions">
+          {view!=="home"&&<button className="nav-btn"onClick={goHome}>← Browse</button>}
+          <button className="nav-btn"onClick={goAuth}>{authUser?"My Account":"Register / Login"}</button>
+          {authUser&&<button className="nav-btn"onClick={handleSignOut}>Sign Out</button>}
+        </div>
       </nav>
 
       {/* ═══ HOME ═══ */}
@@ -372,7 +864,93 @@ export default function RecRoom(){
           <div className="section-header"><h2>⭐ Top Rated This Week</h2><span className="see-all">See all →</span></div>
           <div className="card-grid">{sorted.slice(0,3).map(cm=><CardComponent key={cm.id}cm={cm}/>)}</div>
           <div className="section-header"><h2>Browse All Classmates</h2><span className="see-all">Sorted by rating</span></div>
+          {loadingProfiles&&<div style={{padding:"0 24px 12px",color:"var(--lt-gray)",fontSize:13}}>Loading new profiles...</div>}
           <div className="card-grid">{sorted.map(cm=><CardComponent key={cm.id}cm={cm}/>)}</div>
+        </div>
+      )}
+
+      {/* ═══ AUTH ═══ */}
+      {view==="auth"&&(
+        <div className="review-form-page">
+          <div className="review-form-container">
+            <div className="form-card">
+              <h2>{authMode==="signIn"?"Sign In":"Create Account"}</h2>
+              <p className="form-subtitle">Register or log in to add your profile</p>
+              <div style={{display:"flex",gap:8,marginBottom:16}}>
+                <button className={`dim-chip ${authMode==="signIn"?"active":""}`}onClick={()=>setAuthMode("signIn")}>Sign In</button>
+                <button className={`dim-chip ${authMode==="signUp"?"active":""}`}onClick={()=>setAuthMode("signUp")}>Sign Up</button>
+              </div>
+              <form onSubmit={authMode==="signIn"?handleSignIn:handleSignUp}>
+                {authMode==="signUp"&&(
+                  <div className="form-group">
+                    <label>Username</label>
+                    <input value={authForm.username}onChange={e=>setAuthForm(f=>({...f,username:e.target.value}))}className="nav-search input"style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Email</label>
+                  <input type="email"value={authForm.email}onChange={e=>setAuthForm(f=>({...f,email:e.target.value}))}className="nav-search input"style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                </div>
+                <div className="form-group">
+                  <label>Password</label>
+                  <input type="password"value={authForm.password}onChange={e=>setAuthForm(f=>({...f,password:e.target.value}))}className="nav-search input"style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                </div>
+                {authError&&<div style={{color:"var(--red)",fontSize:13,marginBottom:12}}>{authError}</div>}
+                <button className="submit-btn"type="submit">{authMode==="signIn"?"Sign In":"Create Account"}</button>
+              </form>
+            </div>
+
+            {authUser&&(
+              <div className="form-card"style={{marginTop:20}}>
+                <h2>Create Your Profile</h2>
+                <p className="form-subtitle">This will appear as a new card on the homepage</p>
+                <form onSubmit={handleSaveProfile}>
+                  <div className="form-group">
+                    <label>Full Name</label>
+                    <input value={profileForm.name}onChange={e=>setProfileForm(f=>({...f,name:e.target.value}))}style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Role</label>
+                    <input value={profileForm.role}onChange={e=>setProfileForm(f=>({...f,role:e.target.value}))}style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Skills</label>
+                    <textarea value={profileForm.skills}onChange={e=>setProfileForm(f=>({...f,skills:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Professional Interests</label>
+                    <textarea value={profileForm.professionalInterests}onChange={e=>setProfileForm(f=>({...f,professionalInterests:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Career Path</label>
+                    <textarea value={profileForm.career}onChange={e=>setProfileForm(f=>({...f,career:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Hobbies</label>
+                    <textarea value={profileForm.hobbies}onChange={e=>setProfileForm(f=>({...f,hobbies:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Proudest Project</label>
+                    <textarea value={profileForm.proudProject}onChange={e=>setProfileForm(f=>({...f,proudProject:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Bonus Fact</label>
+                    <textarea value={profileForm.bonusFact}onChange={e=>setProfileForm(f=>({...f,bonusFact:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Image URL</label>
+                    <input value={profileForm.imageUrl}onChange={e=>setProfileForm(f=>({...f,imageUrl:e.target.value}))}style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                  </div>
+                  <div className="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input value={profileForm.tags}onChange={e=>setProfileForm(f=>({...f,tags:e.target.value}))}style={{width:"100%",padding:"12px 16px",border:"1.5px solid var(--border)",borderRadius:10}}/>
+                  </div>
+                  {profileMessage&&<div style={{color:"var(--mid-gray)",fontSize:13,marginBottom:12}}>{profileMessage}</div>}
+                  <button className="submit-btn"type="submit">Save Profile</button>
+                </form>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -381,7 +959,14 @@ export default function RecRoom(){
         <div className="profile-page">
           <button className="back-btn"onClick={goHome}><ArrowLeft size={16}/> Back to Browse</button>
           <div className="profile-hero">
-            <div className="profile-avatar-lg"><span className="initials">{selected.initials}</span></div>
+            <div className="profile-avatar-lg">
+              {selected.image ? (
+                <img className="profile-photo" src={selected.image} alt={`${selected.name} profile`} />
+              ) : (
+                <span className="initials">{selected.initials}</span>
+              )}
+              {selected.cameraShy&&<div className="camera-shy-badge">CAMERA SHY</div>}
+            </div>
             <div className="profile-name">{selected.name}</div>
             <div className="profile-role-badge">{selected.role}</div>
             <div className="profile-overall-stars"><StarRow rating={Math.round(selected.avgRating)}size={20}/><span className="big-avg">{selected.avgRating.toFixed(1)}</span><span className="review-count">({selected.reviewCount} reviews)</span></div>
@@ -399,9 +984,11 @@ export default function RecRoom(){
                 <div className="answers-section">
                   <h3>📋 About Me</h3>
                   <div className="answer-item"><div className="answer-q">💼 Skills</div><div className="answer-a">{selected.skills}</div></div>
+                  <div className="answer-item"><div className="answer-q">🧭 Professional Interests</div><div className="answer-a">{selected.professionalInterests}</div></div>
                   <div className="answer-item"><div className="answer-q">🎯 Career Path</div><div className="answer-a">{selected.career}</div></div>
                   <div className="answer-item"><div className="answer-q">🎨 Hobbies</div><div className="answer-a">{selected.hobbies}</div></div>
                   <div className="answer-item"><div className="answer-q">🏆 Proudest Project</div><div className="answer-a">{selected.proudProject}</div></div>
+                  <div className="answer-item"><div className="answer-q">✨ Bonus</div><div className="answer-a">{selected.bonusFact}</div></div>
                 </div>
                 <div className="rating-breakdown">
                   <h3>⭐ Rating Breakdown</h3>

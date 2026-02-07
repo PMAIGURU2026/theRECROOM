@@ -1,0 +1,51 @@
+REC ROOM PROJECT NOTES
+======================
+
+Date Started: February 1, 2026
+
+Project Overview:
+A Yelp-like review platform for rating and reviewing classmates/cohort members.
+Built with React 18, Vite, and custom CSS styling.
+
+Current Status:
+- MVP complete with full UI
+- All components working
+- Dev server running
+- Code pushed to GitHub
+
+GitHub Repo:
+https://github.com/PMAIGURU2026/theRECROOM.git
+
+Key Features:
+- Browse 6 classmate profiles
+- Search and filter functionality
+- Star rating system (1-5 stars)
+- Review submission form
+- Helpful voting on reviews
+- Professional responsive design
+
+Tech Stack:
+- Frontend: React 18 + Vite
+- Styling: Custom CSS
+- Icons: Lucide React
+- Build: Vite
+- Version Control: Git/GitHub
+
+Files Structure:
+src/App.jsx - Main component with all views
+src/main.jsx - React entry point
+public/index.html - HTML template
+package.json - Dependencies
+vite.config.js - Build configuration
+
+Commands:
+npm run dev - Start development server
+npm run build - Build for production
+npm run preview - Preview production build
+
+Next Steps:
+Phase 2: Add backend persistence
+Phase 3: Deploy to production
+
+Notes:
+[Add your notes here as you work on the project]
